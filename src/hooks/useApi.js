@@ -321,42 +321,134 @@ export function useIngestion() {
 }
 
 /**
- * Hook for synthesis generation
- * @returns {Object} Synthesis state and actions
+ * Hook for synthesis generation with cancel support
+ * @returns {Object} Synthesis state and actions including conflict data
  */
 export function useSynthesis() {
   const [content, setContent] = useState('');
+  const [result, setResult] = useState(null);  // Full synthesis result with conflicts
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [progress, setProgress] = useState(null);  // Progress updates
+  const abortRef = useRef(null);
+  const mountedRef = useRef(true);
 
-  const generate = useCallback(async (params, options = {}) => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Cleanup: abort any ongoing stream
+      if (abortRef.current) {
+        abortRef.current();
+      }
+    };
+  }, []);
+
+  const generate = useCallback((params, options = {}) => {
     setLoading(true);
     setError(null);
     setContent('');
+    setResult(null);
+    setProgress(null);
 
-    try {
-      if (options.stream !== false) {
-        await api.synthesisStream(params, (chunk) => {
-          setContent(prev => prev + chunk);
+    if (options.stream !== false) {
+      // Use generateChapterStream with full handlers
+      abortRef.current = api.generateChapterStream(params, {
+        onToken: (token) => {
+          if (mountedRef.current) {
+            setContent(prev => prev + token);
+          }
+        },
+        onProgress: (data) => {
+          if (mountedRef.current) {
+            setProgress(data);
+          }
+        },
+        onData: (event, data) => {
+          // Handle stage: "complete" which contains the full result
+          if (mountedRef.current && data?.stage === 'complete' && data?.result) {
+            setResult(data.result);
+          }
+        },
+        onComplete: () => {
+          if (mountedRef.current) {
+            setLoading(false);
+            abortRef.current = null;
+          }
+        },
+        onError: (err) => {
+          if (mountedRef.current) {
+            setError(err);
+            setLoading(false);
+            abortRef.current = null;
+          }
+        },
+        onAbort: () => {
+          if (mountedRef.current) {
+            setLoading(false);
+            abortRef.current = null;
+          }
+        }
+      });
+    } else {
+      // Non-streaming mode - returns full SynthesisResponse
+      api.generateChapter(params)
+        .then(res => {
+          if (mountedRef.current) {
+            // Build markdown content from sections for display
+            const markdown = buildMarkdownFromResult(res);
+            setContent(markdown);
+            setResult(res);  // Full result with conflict_count, conflict_report
+            setLoading(false);
+          }
+        })
+        .catch(err => {
+          if (mountedRef.current) {
+            setError(err);
+            setLoading(false);
+          }
         });
-      } else {
-        const result = await api.synthesisGenerate(params);
-        setContent(result.content);
-      }
-    } catch (err) {
-      setError(err);
-      throw err;
-    } finally {
-      setLoading(false);
+    }
+  }, []);
+
+  const cancel = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current();
+      abortRef.current = null;
     }
   }, []);
 
   const clear = useCallback(() => {
+    cancel();
     setContent('');
+    setResult(null);
+    setProgress(null);
     setError(null);
-  }, []);
+  }, [cancel]);
 
-  return { content, loading, error, generate, clear };
+  return { content, result, loading, error, progress, generate, clear, cancel };
+}
+
+/**
+ * Build markdown content from synthesis result sections
+ * @param {Object} result - SynthesisResponse object
+ * @returns {string} Markdown content
+ */
+function buildMarkdownFromResult(result) {
+  if (!result) return '';
+
+  let md = `# ${result.title}\n\n`;
+
+  if (result.abstract) {
+    md += `## Abstract\n\n${result.abstract}\n\n`;
+  }
+
+  for (const section of (result.sections || [])) {
+    const heading = '#'.repeat(section.level + 1);
+    md += `${heading} ${section.title}\n\n${section.content}\n\n`;
+  }
+
+  return md;
 }
 
 /**

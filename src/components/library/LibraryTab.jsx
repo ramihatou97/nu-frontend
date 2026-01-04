@@ -4,7 +4,7 @@ import DocumentCard from './DocumentCard';
 import DocumentViewer from './DocumentViewer';
 import { useDocuments } from '../../hooks/useApi';
 import { useVirtualList } from '../../hooks/useVirtualList';
-import { Input, Button, Spinner, EmptyState, Card } from '../ui';
+import { Input, Button, Spinner, EmptyState, Card, Alert } from '../ui';
 
 /**
  * Document library tab component
@@ -123,6 +123,21 @@ function LibraryTab() {
           Manage your ingested documents ({documents.length} total)
         </p>
       </header>
+
+      {error && (
+        <Alert variant="error" title="Failed to load documents">
+          {error.message || 'An error occurred while loading documents.'}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw size={14} />}
+            onClick={() => fetchDocuments()}
+            style={{ marginLeft: '8px' }}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
 
       <div className="library-toolbar">
         <Input

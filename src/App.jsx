@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Tabs, Spinner, ErrorBoundary } from './components/ui';
 import { ToastProvider } from './context/ToastContext';
+import { SynthesisProvider } from './context/SynthesisContext';
 
 // Lazy load tabs for code splitting
 const IngestTab = lazy(() => import('./components/ingest/IngestTab'));
@@ -101,7 +102,8 @@ function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <div className="app">
+        <SynthesisProvider>
+          <div className="app">
           <header className="app-header" role="banner">
             <div className="app-logo">
               <Brain size={32} aria-hidden="true" />
@@ -136,7 +138,8 @@ function App() {
               NeuroSynth v3.0.0 &mdash; Powered by RAG
             </p>
           </footer>
-        </div>
+          </div>
+        </SynthesisProvider>
       </ToastProvider>
     </ErrorBoundary>
   );

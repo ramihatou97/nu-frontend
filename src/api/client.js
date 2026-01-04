@@ -17,6 +17,60 @@ const DEFAULT_TIMEOUT = 30000;  // 30 seconds
 const STREAM_TIMEOUT = 120000;  // 2 minutes for streaming
 
 // =============================================================================
+// TYPE DEFINITIONS (JSDoc)
+// =============================================================================
+
+/**
+ * @typedef {'quantitative'|'contradictory'|'approach'|'temporal'} ConflictType
+ * Types of conflicts detected in synthesis sources:
+ * - quantitative: Numerical disagreements (e.g., 15% vs 25%)
+ * - contradictory: Direct statement contradictions
+ * - approach: Different recommended techniques
+ * - temporal: Outdated vs current information
+ */
+
+/**
+ * @typedef {Object} ConflictItem
+ * @property {ConflictType} type - Type of conflict
+ * @property {string} description - Description of the conflict (e.g., "15% vs 25%")
+ * @property {string} source_a - First conflicting source
+ * @property {string} source_b - Second conflicting source
+ * @property {string} section - Section where conflict was detected
+ * @property {'low'|'medium'|'high'} severity - Severity level
+ * @property {string} [context_a] - Context from first source
+ * @property {string} [context_b] - Context from second source
+ */
+
+/**
+ * @typedef {Object} ConflictReport
+ * @property {number} count - Total number of conflicts
+ * @property {'heuristic'|'llm'} mode - Detection mode used
+ * @property {number} sections_analyzed - Number of sections analyzed
+ * @property {Object<string, number>} by_type - Conflicts by type
+ * @property {Object<string, number>} by_severity - Conflicts by severity
+ * @property {ConflictItem[]} conflicts - List of detected conflicts
+ */
+
+/**
+ * @typedef {Object} SynthesisResponse
+ * @property {string} title - Synthesis title
+ * @property {string} abstract - Abstract text
+ * @property {Array} sections - Generated sections
+ * @property {Array} references - Source references
+ * @property {Array} figure_requests - Figure placeholders
+ * @property {Array} resolved_figures - Resolved figures
+ * @property {number} total_words - Total word count
+ * @property {number} total_figures - Total figure count
+ * @property {number} total_citations - Total citation count
+ * @property {number} synthesis_time_ms - Generation time in ms
+ * @property {number|null} verification_score - Optional verification score
+ * @property {string[]} verification_issues - Verification issues found
+ * @property {boolean} verified - Whether verified
+ * @property {number} conflict_count - Number of detected conflicts
+ * @property {ConflictReport|null} conflict_report - Detailed conflict report
+ */
+
+// =============================================================================
 // ERROR HANDLING
 // =============================================================================
 
@@ -696,18 +750,18 @@ export const api = {
     })}`),
 
   /**
-   * Delete entity.
-   * DELETE /api/v1/entities/{cui}
+   * Delete entity by CUI.
+   * DELETE /api/v1/entities/cui/{cui}
    */
   deleteEntity: (cui) =>
-    request(`/api/v1/entities/${encodeURIComponent(cui)}`, { method: 'DELETE' }),
+    request(`/api/v1/entities/cui/${encodeURIComponent(cui)}`, { method: 'DELETE' }),
 
   /**
-   * Bulk delete entities.
-   * DELETE /api/v1/entities
+   * Bulk delete entities by CUI.
+   * DELETE /api/v1/entities/by-cui
    */
   bulkDeleteEntities: (cuis) =>
-    request('/api/v1/entities', {
+    request('/api/v1/entities/by-cui', {
       method: 'DELETE',
       body: { cuis }
     }),
@@ -755,8 +809,9 @@ export const api = {
    * Streaming synthesis.
    * POST /api/synthesis/generate/stream
    */
-  generateChapterStream: (params, handlers) =>
-    streamSSE('/api/synthesis/generate/stream', {
+  generateChapterStream: (params, handlers) => {
+    // Return the abort function from streamSSE
+    return streamSSE('/api/synthesis/generate/stream', {
       topic: params.topic,
       template_type: params.template_type ?? 'PROCEDURAL',
       max_chunks: params.max_chunks ?? 50,
@@ -764,7 +819,8 @@ export const api = {
       gemini_verification: params.gemini_verification ?? false,
       author: params.author,
       institution: params.institution
-    }, handlers),
+    }, handlers);
+  },
 
   /**
    * Check synthesis service health.
@@ -1032,6 +1088,230 @@ export const api = {
    */
   getImage: (imageId) =>
     request(`/images/${imageId}`),
+
+  // ===========================================================================
+  // AUTHORITY REGISTRY (7 endpoints)
+  // ===========================================================================
+
+  /**
+   * Get all authority sources with scores.
+   * GET /api/v1/registry
+   */
+  getRegistry: () =>
+    request('/api/v1/registry'),
+
+  /**
+   * Update authority score for a source.
+   * PUT /api/v1/registry/score
+   */
+  updateRegistryScore: (source, score) =>
+    request('/api/v1/registry/score', {
+      method: 'PUT',
+      body: { source, score }
+    }),
+
+  /**
+   * Add a custom authority source.
+   * POST /api/v1/registry/custom
+   */
+  addCustomSource: (data) =>
+    request('/api/v1/registry/custom', {
+      method: 'POST',
+      body: {
+        name: data.name,
+        score: data.score,
+        keywords: data.keywords,
+        tier: data.tier ?? 3
+      }
+    }),
+
+  /**
+   * Remove a custom authority source.
+   * DELETE /api/v1/registry/custom/{name}
+   */
+  removeCustomSource: (name) =>
+    request(`/api/v1/registry/custom/${encodeURIComponent(name)}`, {
+      method: 'DELETE'
+    }),
+
+  /**
+   * Detect authority source from document title.
+   * POST /api/v1/registry/detect
+   */
+  detectAuthority: (title) =>
+    request('/api/v1/registry/detect', {
+      method: 'POST',
+      body: { title }
+    }),
+
+  /**
+   * Reset registry to default values.
+   * POST /api/v1/registry/reset
+   */
+  resetRegistry: () =>
+    request('/api/v1/registry/reset', { method: 'POST' }),
+
+  /**
+   * Get tier definitions with sources.
+   * GET /api/v1/registry/tiers
+   */
+  getRegistryTiers: () =>
+    request('/api/v1/registry/tiers'),
+
+  // ===========================================================================
+  // ENHANCED CHAT (9 endpoints)
+  // ===========================================================================
+
+  /**
+   * Ask question with enhanced chat (citations, token tracking).
+   * POST /api/v1/chat/ask
+   */
+  chatAsk: (params) =>
+    request('/api/v1/chat/ask', {
+      method: 'POST',
+      body: {
+        message: params.message,
+        conversation_id: params.conversation_id,
+        synthesis_id: params.synthesis_id,
+        filters: params.filters,
+        include_citations: params.include_citations ?? true,
+        include_images: params.include_images ?? true,
+        max_context_chunks: params.max_context_chunks ?? 10,
+        max_history_tokens: params.max_history_tokens ?? 4000
+      },
+      timeout: 60000
+    }),
+
+  /**
+   * Stream chat response via SSE.
+   * POST /api/v1/chat/ask/stream
+   */
+  chatAskStream: (params, handlers) =>
+    streamSSE('/api/v1/chat/ask/stream', {
+      message: params.message,
+      conversation_id: params.conversation_id,
+      synthesis_id: params.synthesis_id,
+      filters: params.filters,
+      include_citations: params.include_citations ?? true,
+      include_images: params.include_images ?? true,
+      max_context_chunks: params.max_context_chunks ?? 10,
+      max_history_tokens: params.max_history_tokens ?? 4000
+    }, handlers),
+
+  /**
+   * Link conversation to synthesis result.
+   * POST /api/v1/chat/link-synthesis
+   */
+  linkSynthesis: (conversationId, synthesisId) =>
+    request('/api/v1/chat/link-synthesis', {
+      method: 'POST',
+      body: {
+        conversation_id: conversationId,
+        synthesis_id: synthesisId
+      }
+    }),
+
+  /**
+   * List recent chat conversations.
+   * GET /api/v1/chat/conversations
+   */
+  getChatConversations: (limit = 20) =>
+    request(`/api/v1/chat/conversations${buildQueryString({ limit })}`),
+
+  /**
+   * Get full chat conversation history.
+   * GET /api/v1/chat/conversations/{id}
+   */
+  getChatConversation: (conversationId) =>
+    request(`/api/v1/chat/conversations/${conversationId}`),
+
+  /**
+   * Delete a chat conversation.
+   * DELETE /api/v1/chat/conversations/{id}
+   */
+  deleteChatConversation: (conversationId) =>
+    request(`/api/v1/chat/conversations/${conversationId}`, { method: 'DELETE' }),
+
+  /**
+   * Clear chat conversation history but keep metadata.
+   * POST /api/v1/chat/conversations/{id}/clear
+   */
+  clearChatConversation: (conversationId) =>
+    request(`/api/v1/chat/conversations/${conversationId}/clear`, { method: 'POST' }),
+
+  /**
+   * Get chat store backend info.
+   * GET /api/v1/chat/store-info
+   */
+  getChatStoreInfo: () =>
+    request('/api/v1/chat/store-info'),
+
+  /**
+   * Chat subsystem health check.
+   * GET /api/v1/chat/health
+   */
+  getChatHealth: () =>
+    request('/api/v1/chat/health'),
+
+  // ===========================================================================
+  // MEMORY-SAFE INGESTION (3 endpoints)
+  // ===========================================================================
+
+  /**
+   * Upload PDF with memory-safe processing.
+   * POST /api/v1/ingest/memory-safe/upload
+   */
+  memorySafeUpload: (file, config = {}) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    if (config.title) formData.append('title', config.title);
+    formData.append('force_subprocess', config.force_subprocess ?? false);
+    formData.append('enable_scispacy', config.enable_scispacy ?? true);
+    formData.append('enable_biomedclip', config.enable_biomedclip ?? true);
+
+    return request('/api/v1/ingest/memory-safe/upload', {
+      method: 'POST',
+      body: formData,
+      timeout: 300000
+    });
+  },
+
+  /**
+   * Get memory usage statistics.
+   * GET /api/v1/ingest/memory-safe/memory-stats
+   */
+  getMemoryStats: () =>
+    request('/api/v1/ingest/memory-safe/memory-stats'),
+
+  /**
+   * Force unload all loaded models.
+   * POST /api/v1/ingest/memory-safe/unload-all
+   */
+  unloadAllModels: () =>
+    request('/api/v1/ingest/memory-safe/unload-all', { method: 'POST' }),
+
+  // ===========================================================================
+  // DOCUMENT CHUNK/IMAGE DELETION (2 endpoints)
+  // ===========================================================================
+
+  /**
+   * Delete document chunks.
+   * DELETE /api/v1/documents/{id}/chunks
+   */
+  deleteDocumentChunks: (documentId, chunkIds = null) =>
+    request(`/api/v1/documents/${documentId}/chunks${chunkIds ? buildQueryString({ chunk_ids: chunkIds }) : ''}`, {
+      method: 'DELETE'
+    }),
+
+  /**
+   * Delete document images.
+   * DELETE /api/v1/documents/{id}/images
+   */
+  deleteDocumentImages: (documentId, imageIds = null) =>
+    request(`/api/v1/documents/${documentId}/images${imageIds ? buildQueryString({ image_ids: imageIds }) : ''}`, {
+      method: 'DELETE'
+    }),
 
   // ===========================================================================
   // UTILITIES

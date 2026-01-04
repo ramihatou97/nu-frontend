@@ -3,7 +3,8 @@ import { Tags, Search } from 'lucide-react';
 import EntityCard from './EntityCard';
 import { useEntities } from '../../hooks/useApi';
 import { useVirtualList } from '../../hooks/useVirtualList';
-import { Input, Button, Spinner, EmptyState, Card, Badge } from '../ui';
+import { Input, Button, Spinner, EmptyState, Card, Badge, Alert } from '../ui';
+import { RefreshCw } from 'lucide-react';
 
 const ENTITY_TYPES = [
   { id: 'all', label: 'All' },
@@ -93,6 +94,21 @@ function EntitiesTab() {
           Browse and search extracted medical concepts
         </p>
       </header>
+
+      {error && (
+        <Alert variant="error" title="Failed to load entities">
+          {error.message || 'An error occurred while loading entities.'}
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw size={14} />}
+            onClick={() => fetchEntities({ limit: 200 })}
+            style={{ marginLeft: '8px' }}
+          >
+            Retry
+          </Button>
+        </Alert>
+      )}
 
       <form onSubmit={handleSearch} className="entities-search" role="search">
         <Input

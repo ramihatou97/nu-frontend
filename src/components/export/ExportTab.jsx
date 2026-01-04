@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useState } from 'react';
-import { Download, FileText, Code, FileType, File } from 'lucide-react';
+import { Download, FileText, Code, FileType, File, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
+import { useSynthesisOutput } from '../../context/SynthesisContext';
 import { downloadBlob, downloadText } from '../../utils/helpers';
 import { Button, Card, Spinner, Alert } from '../ui';
 
@@ -43,18 +44,22 @@ function ExportTab() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Mock content for demo - in real app, this would come from synthesis
-  const [content] = useState({
-    title: 'Generated Synthesis',
-    sections: [
-      {
-        heading: 'Introduction',
-        content: 'Sample content for export demonstration.',
-      },
-    ],
-  });
+  // Get content from SynthesisContext (shared with SynthesisTab)
+  const { content: synthesisContent, topic, hasContent } = useSynthesisOutput();
+
+  // Build export payload from synthesis output
+  const content = hasContent ? {
+    topic,
+    title: topic,
+    content: synthesisContent,
+  } : null;
 
   const handleExport = useCallback(async (format) => {
+    if (!content) {
+      setError('No synthesis content to export. Generate a synthesis first.');
+      return;
+    }
+
     setExporting(format.id);
     setError(null);
     setSuccess(null);
@@ -140,7 +145,7 @@ function ExportTab() {
               <Button
                 variant="primary"
                 onClick={() => handleExport(format)}
-                disabled={isExporting || exporting !== null}
+                disabled={!hasContent || isExporting || exporting !== null}
                 aria-label={`Export as ${format.label}`}
               >
                 {isExporting ? (
@@ -162,10 +167,21 @@ function ExportTab() {
 
       <Card className="export-preview-card">
         <h3>Preview</h3>
-        <p className="export-preview-note">
-          Content from your most recent synthesis will be exported.
-          Generate a synthesis first if you haven't already.
-        </p>
+        {hasContent ? (
+          <div className="export-preview-content">
+            <p className="export-preview-topic"><strong>Topic:</strong> {topic}</p>
+            <p className="export-preview-note">
+              {synthesisContent.length.toLocaleString()} characters ready for export.
+            </p>
+          </div>
+        ) : (
+          <div className="export-preview-empty">
+            <AlertCircle size={24} aria-hidden="true" />
+            <p className="export-preview-note">
+              No synthesis content available. Generate a synthesis first using the Synthesis tab.
+            </p>
+          </div>
+        )}
       </Card>
     </div>
   );
