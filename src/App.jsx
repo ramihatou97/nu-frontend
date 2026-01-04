@@ -11,6 +11,7 @@ import {
   Activity,
   Brain,
   Network,
+  FolderSearch,
 } from 'lucide-react';
 import { Tabs, Spinner, ErrorBoundary } from './components/ui';
 import { ToastProvider } from './context/ToastContext';
@@ -27,11 +28,13 @@ const EntitiesTab = lazy(() => import('./components/entities/EntitiesTab'));
 const CompareTab = lazy(() => import('./components/compare/CompareTab'));
 const HealthTab = lazy(() => import('./components/health/HealthTab'));
 const GraphTab = lazy(() => import('./components/graph/GraphTab'));
+const ScannerTab = lazy(() => import('./components/library/ScannerTab'));
 
 /**
  * Tab configuration
  */
 const TABS = [
+  { id: 'scanner', label: 'Scanner', icon: <FolderSearch size={18} /> },
   { id: 'ingest', label: 'Ingest', icon: <Upload size={18} /> },
   { id: 'ask', label: 'Ask', icon: <MessageSquare size={18} /> },
   { id: 'browse', label: 'Browse', icon: <Compass size={18} /> },
@@ -61,6 +64,8 @@ function TabLoading() {
  */
 function TabContent({ activeTab, onTabChange }) {
   switch (activeTab) {
+    case 'scanner':
+      return <ScannerTab onTabChange={onTabChange} />;
     case 'ingest':
       return <IngestTab />;
     case 'ask':

@@ -1365,6 +1365,116 @@ export const api = {
   },
 
   // ===========================================================================
+  // LIBRARY SCANNER API
+  // ===========================================================================
+  // Pre-ingest browsing of reference library with metadata extraction
+
+  /**
+   * Start scanning a directory for PDF files.
+   * POST /api/v1/library/scan
+   */
+  startLibraryScan: (path, recursive = true) =>
+    request('/api/v1/library/scan', {
+      method: 'POST',
+      body: { path, recursive }
+    }),
+
+  /**
+   * Get scan progress status.
+   * GET /api/v1/library/scan/status
+   */
+  getScanStatus: () =>
+    request('/api/v1/library/scan/status'),
+
+  /**
+   * Get library statistics.
+   * GET /api/v1/library/statistics
+   */
+  getLibraryStatistics: () =>
+    request('/api/v1/library/statistics'),
+
+  /**
+   * Get available filter options for library browsing.
+   * GET /api/v1/library/filters
+   */
+  getLibraryFilters: () =>
+    request('/api/v1/library/filters'),
+
+  /**
+   * Search/browse library documents (pre-ingest).
+   * GET /api/v1/library/documents
+   */
+  getLibraryDocuments: (params = {}) =>
+    request(`/api/v1/library/documents${buildQueryString({
+      query: params.query,
+      specialty: params.specialty,
+      document_type: params.document_type,
+      min_authority: params.min_authority,
+      is_ingested: params.is_ingested,
+      has_images: params.has_images,
+      min_pages: params.min_pages,
+      max_pages: params.max_pages,
+      limit: params.limit || 50,
+      offset: params.offset || 0
+    })}`),
+
+  /**
+   * Get detailed document info including chapters.
+   * GET /api/v1/library/documents/{doc_id}
+   */
+  getLibraryDocument: (docId) =>
+    request(`/api/v1/library/documents/${docId}`),
+
+  /**
+   * Search chapters within library documents.
+   * GET /api/v1/library/chapters/search
+   */
+  searchLibraryChapters: (params = {}) =>
+    request(`/api/v1/library/chapters/search${buildQueryString({
+      query: params.query,
+      specialty: params.specialty,
+      min_score: params.min_score || 60,
+      limit: params.limit || 50
+    })}`),
+
+  /**
+   * Queue selected documents/chapters for ingestion.
+   * POST /api/v1/library/ingest-selected
+   */
+  queueLibraryForIngest: (documentIds, chapterSelections = {}) =>
+    request('/api/v1/library/ingest-selected', {
+      method: 'POST',
+      body: { document_ids: documentIds, chapter_selections: chapterSelections }
+    }),
+
+  /**
+   * Sync ingestion status back to library catalog.
+   * POST /api/v1/library/sync-ingested
+   */
+  syncLibraryIngested: () =>
+    request('/api/v1/library/sync-ingested', { method: 'POST' }),
+
+  /**
+   * Save library catalog to JSON.
+   * POST /api/v1/library/catalog/save
+   */
+  saveLibraryCatalog: (path) =>
+    request('/api/v1/library/catalog/save', {
+      method: 'POST',
+      body: { path }
+    }),
+
+  /**
+   * Load library catalog from JSON.
+   * POST /api/v1/library/catalog/load
+   */
+  loadLibraryCatalog: (path) =>
+    request('/api/v1/library/catalog/load', {
+      method: 'POST',
+      body: { path }
+    }),
+
+  // ===========================================================================
   // LEGACY COMPATIBILITY LAYER
   // ===========================================================================
   // These methods provide backward compatibility with the old class-based API

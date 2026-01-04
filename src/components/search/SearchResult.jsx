@@ -38,15 +38,21 @@ function SearchResult({ result, query, onSelect }) {
         <FileText size={16} aria-hidden="true" />
         <span className="search-result-source">
           {result.document_title || 'Untitled'}
+          {result.page_start != null && `, Page ${result.page_start}`}
         </span>
-        {result.page_start != null && (
-          <span className="search-result-page">Page {result.page_start}</span>
-        )}
         <span className="search-result-score" aria-label={`Relevance score: ${((result.final_score || 0) * 100).toFixed(0)}%`}>
           {((result.final_score || 0) * 100).toFixed(0)}%
         </span>
       </header>
 
+      {/* AI-generated summary - always show if available */}
+      {result.summary && (
+        <p className="search-result-summary">
+          <strong>Summary:</strong> {truncate(result.summary, 250)}
+        </p>
+      )}
+
+      {/* Content preview */}
       <p
         className="search-result-content"
         dangerouslySetInnerHTML={{

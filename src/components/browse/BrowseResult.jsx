@@ -116,10 +116,8 @@ function BrowseResult({ result, query, onSelect, onFindSimilar, onAsk }) {
         <FileText size={16} aria-hidden="true" />
         <span className="browse-result-source">
           {result.document_title || 'Untitled'}
+          {pageNumber != null && `, Page ${pageNumber}`}
         </span>
-        {pageNumber != null && (
-          <span className="browse-result-page">Page {pageNumber}</span>
-        )}
         <span className="browse-result-score" aria-label={`Match: ${(score * 100).toFixed(0)}%`}>
           {(score * 100).toFixed(0)}% match
         </span>
@@ -142,6 +140,13 @@ function BrowseResult({ result, query, onSelect, onFindSimilar, onAsk }) {
           </span>
         )}
       </div>
+
+      {/* AI Summary (if available) */}
+      {result.summary && (
+        <p className="browse-result-summary">
+          <strong>Summary:</strong> {truncate(result.summary, 200)}
+        </p>
+      )}
 
       {/* Content Preview */}
       <p
