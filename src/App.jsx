@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, Suspense, lazy } from 'react';
 import {
   Upload,
-  Search,
+  Compass,
   MessageSquare,
   Library,
   BookOpen,
@@ -18,8 +18,8 @@ import { SynthesisProvider } from './context/SynthesisContext';
 
 // Lazy load tabs for code splitting
 const IngestTab = lazy(() => import('./components/ingest/IngestTab'));
-const SearchTab = lazy(() => import('./components/search/SearchTab'));
 const AskTab = lazy(() => import('./components/ask/AskTab'));
+const BrowseTab = lazy(() => import('./components/browse/BrowseTab'));
 const LibraryTab = lazy(() => import('./components/library/LibraryTab'));
 const SynthesisTab = lazy(() => import('./components/synthesis/SynthesisTab'));
 const ExportTab = lazy(() => import('./components/export/ExportTab'));
@@ -33,8 +33,8 @@ const GraphTab = lazy(() => import('./components/graph/GraphTab'));
  */
 const TABS = [
   { id: 'ingest', label: 'Ingest', icon: <Upload size={18} /> },
-  { id: 'search', label: 'Search', icon: <Search size={18} /> },
   { id: 'ask', label: 'Ask', icon: <MessageSquare size={18} /> },
+  { id: 'browse', label: 'Browse', icon: <Compass size={18} /> },
   { id: 'library', label: 'Library', icon: <Library size={18} /> },
   { id: 'synthesis', label: 'Synthesis', icon: <BookOpen size={18} /> },
   { id: 'export', label: 'Export', icon: <Download size={18} /> },
@@ -59,14 +59,14 @@ function TabLoading() {
  * Render tab content based on active tab
  * @param {string} activeTab - Active tab ID
  */
-function TabContent({ activeTab }) {
+function TabContent({ activeTab, onTabChange }) {
   switch (activeTab) {
     case 'ingest':
       return <IngestTab />;
-    case 'search':
-      return <SearchTab />;
     case 'ask':
       return <AskTab />;
+    case 'browse':
+      return <BrowseTab onTabChange={onTabChange} />;
     case 'library':
       return <LibraryTab />;
     case 'synthesis':
@@ -128,7 +128,7 @@ function App() {
                 id={`panel-${activeTab}`}
                 className="tab-panel"
               >
-                <TabContent activeTab={activeTab} />
+                <TabContent activeTab={activeTab} onTabChange={handleTabChange} />
               </div>
             </Suspense>
           </main>

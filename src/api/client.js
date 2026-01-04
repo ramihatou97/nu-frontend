@@ -438,12 +438,16 @@ export const api = {
       body: {
         query: params.query,
         mode: params.mode || 'hybrid',  // 'hybrid', 'text', 'image'
-        top_k: params.top_k ?? 20,
+        top_k: params.top_k ?? params.limit ?? 20,
         filters: params.filters ? {
           chunk_types: params.filters.chunk_types,
           specialties: params.filters.specialties,
           document_ids: params.filters.document_ids,
-          min_authority: params.filters.min_authority
+          min_authority: params.filters.min_authority,
+          min_quality: params.filters.min_quality,
+          page_range: (params.filters.min_page || params.filters.max_page)
+            ? [params.filters.min_page || 1, params.filters.max_page || 9999]
+            : undefined
         } : undefined,
         advanced: params.advanced ? {
           nprobe: params.advanced.nprobe ?? 10,
@@ -560,6 +564,27 @@ export const api = {
         before: params.before,
         conversation_ids: params.conversation_ids
       }
+    }),
+
+  /**
+   * Multi-turn conversation with context persistence.
+   * POST /api/v1/rag/conversation
+   *
+   * @param {Object} params
+   * @param {string} params.message - User message
+   * @param {string} [params.conversation_id] - Existing conversation ID (omit to start new)
+   * @param {Object} [params.filters] - Search filters
+   * @returns {Promise<{conversation_id: string, answer: string, citations: Array, history_length: number}>}
+   */
+  sendConversation: (params) =>
+    request('/api/v1/rag/conversation', {
+      method: 'POST',
+      body: {
+        message: params.message,
+        conversation_id: params.conversation_id,
+        filters: params.filters
+      },
+      timeout: 60000
     }),
 
   /**

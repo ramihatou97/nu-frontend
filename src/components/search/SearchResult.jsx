@@ -39,11 +39,11 @@ function SearchResult({ result, query, onSelect }) {
         <span className="search-result-source">
           {result.document_title || 'Untitled'}
         </span>
-        {result.page && (
-          <span className="search-result-page">Page {result.page}</span>
+        {result.page_start != null && (
+          <span className="search-result-page">Page {result.page_start}</span>
         )}
-        <span className="search-result-score" aria-label={`Relevance score: ${(result.score * 100).toFixed(0)}%`}>
-          {(result.score * 100).toFixed(0)}%
+        <span className="search-result-score" aria-label={`Relevance score: ${((result.final_score || 0) * 100).toFixed(0)}%`}>
+          {((result.final_score || 0) * 100).toFixed(0)}%
         </span>
       </header>
 
@@ -54,11 +54,11 @@ function SearchResult({ result, query, onSelect }) {
         }}
       />
 
-      {result.metadata?.entities && result.metadata.entities.length > 0 && (
+      {result.entity_names?.length > 0 && (
         <footer className="search-result-entities">
-          {result.metadata.entities.slice(0, 5).map((entity, i) => (
+          {result.entity_names.slice(0, 5).map((name, i) => (
             <span key={i} className="entity-tag">
-              {entity.name}
+              {name}
             </span>
           ))}
         </footer>

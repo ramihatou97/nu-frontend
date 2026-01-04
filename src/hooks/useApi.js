@@ -133,7 +133,15 @@ export function useSearch() {
     setError(null);
 
     try {
-      const data = await api.search({ query, ...options });
+      // Structure filters properly for the API client
+      const { limit, top_k, mode, ...filterOptions } = options;
+      const searchParams = {
+        query,
+        top_k: top_k ?? limit,
+        mode: mode || 'hybrid',
+        filters: Object.keys(filterOptions).length > 0 ? filterOptions : undefined
+      };
+      const data = await api.search(searchParams);
       const items = Array.isArray(data) ? data : data.results || [];
       setResults(items);
       return items;
@@ -156,53 +164,186 @@ export function useSearch() {
 }
 
 /**
- * Hook for RAG Q&A with streaming
+ * Hook for RAG Q&A with streaming and optional conversation persistence
+ *
  * @returns {Object} RAG state and actions
+ * @property {string} answer - Current answer text
+ * @property {Array} sources - Source documents
+ * @property {Array} citations - Citation references
+ * @property {boolean} loading - Loading state
+ * @property {Error|null} error - Error state
+ * @property {string|null} conversationId - Backend conversation ID (when persisted)
+ * @property {number} historyLength - Server-side history count
+ * @property {Function} ask - Ask a question
+ * @property {Function} loadConversation - Load existing conversation from backend
+ * @property {Function} newConversation - Start fresh conversation
+ * @property {Function} clearHistory - Clear current conversation
  */
 export function useRAG() {
   const [answer, setAnswer] = useState('');
   const [sources, setSources] = useState([]);
+  const [citations, setCitations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [conversationId, setConversationId] = useState(null);
+  const [historyLength, setHistoryLength] = useState(0);
 
+  /**
+   * Ask a question with optional conversation persistence
+   *
+   * @param {string} question - The question to ask
+   * @param {Object} [options] - Options
+   * @param {boolean} [options.stream=true] - Use streaming (fast, no conversation persistence)
+   * @param {boolean} [options.persistConversation=false] - Use /conversation endpoint for multi-turn
+   * @param {Object} [options.filters] - Search filters
+   * @returns {Promise<{answer: string, conversationId?: string}>}
+   */
   const ask = useCallback(async (question, options = {}) => {
     setLoading(true);
     setError(null);
     setAnswer('');
 
     try {
-      if (options.stream !== false) {
-        await api.ragStream(question, options, (chunk) => {
-          setAnswer(prev => prev + chunk);
+      let finalAnswer = '';
+      let newConvId = conversationId;
+
+      // Option 1: Persistent conversation mode (slower, but tracked in backend)
+      if (options.persistConversation) {
+        const result = await api.sendConversation({
+          message: question,
+          conversation_id: conversationId,
+          filters: options.filters
         });
-      } else {
-        const result = await api.ragAsk(question, options);
-        setAnswer(result.answer);
-        setSources(result.sources || []);
+
+        finalAnswer = result.answer;
+        newConvId = result.conversation_id;
+
+        setAnswer(finalAnswer);
+        setCitations(result.citations || []);
+        setConversationId(newConvId);
+        setHistoryLength(result.history_length || 0);
+
+        return { answer: finalAnswer, conversationId: newConvId };
       }
 
-      setHistory(prev => [
-        ...prev,
-        { role: 'user', content: question },
-        { role: 'assistant', content: answer },
-      ]);
+      // Option 2: Streaming mode (fast, client-side history only)
+      if (options.stream !== false) {
+        await api.askStream(
+          { question, ...options },
+          {
+            onToken: (chunk) => {
+              finalAnswer += chunk;
+              setAnswer(finalAnswer);
+            },
+            onCitation: (citation) => {
+              setCitations(prev => [...prev, citation]);
+            },
+            onDone: (data) => {
+              // Capture any metadata from done event
+              if (data?.citations) {
+                setCitations(data.citations);
+              }
+            }
+          }
+        );
+      } else {
+        // Option 3: Non-streaming one-shot (fast, no persistence)
+        const result = await api.ask({ question, ...options });
+        finalAnswer = result.answer;
+        setAnswer(finalAnswer);
+        setSources(result.sources || []);
+        setCitations(result.citations || result.used_citations || []);
+      }
+
+      // Increment local history count for non-persistent modes
+      setHistoryLength(prev => prev + 1);
+
+      return { answer: finalAnswer, conversationId };
     } catch (err) {
       setError(err);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [answer]);
+  }, [conversationId]);
 
-  const clearHistory = useCallback(async () => {
-    await api.ragClear();
-    setHistory([]);
-    setAnswer('');
-    setSources([]);
+  /**
+   * Load an existing conversation from the backend
+   *
+   * @param {string} id - Conversation ID to load
+   * @returns {Promise<Object>} The conversation data
+   */
+  const loadConversation = useCallback(async (id) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const conv = await api.getConversation(id);
+
+      setConversationId(id);
+      setHistoryLength(conv.history?.length || conv.history_length || 0);
+
+      // Restore last assistant answer if available
+      if (conv.history?.length > 0) {
+        const lastAssistant = [...conv.history].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          setAnswer(lastAssistant.content);
+        }
+      }
+
+      return conv;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { answer, sources, loading, error, history, ask, clearHistory };
+  /**
+   * Start a new conversation (resets state)
+   */
+  const newConversation = useCallback(() => {
+    setConversationId(null);
+    setHistoryLength(0);
+    setAnswer('');
+    setSources([]);
+    setCitations([]);
+    setError(null);
+  }, []);
+
+  /**
+   * Clear the current conversation from backend and reset state
+   */
+  const clearHistory = useCallback(async () => {
+    try {
+      if (conversationId) {
+        await api.clearConversations({ conversation_ids: [conversationId] });
+      }
+    } catch (err) {
+      // Log but don't throw - still reset local state
+      console.warn('Failed to clear conversation on server:', err);
+    }
+
+    newConversation();
+  }, [conversationId, newConversation]);
+
+  return {
+    // State
+    answer,
+    sources,
+    citations,
+    loading,
+    error,
+    conversationId,
+    historyLength,
+
+    // Actions
+    ask,
+    loadConversation,
+    newConversation,
+    clearHistory,
+  };
 }
 
 /**
